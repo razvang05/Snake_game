@@ -1,0 +1,106 @@
+###server.cpp
+
+In server avem structura Client care retine date despre client, structura GameSession reprezinta 
+starea completa a jocului pentru un client.
+1.pair<int,int> spawnFruit(const vector<pair<int,int>>& snake)
+- generează coordonatele unui fruct nou.
+- Folosește rand()%WIDTH și rand()%HEIGHT pentru a alege poziția.
+- Repetă generarea dacă poziția e deja ocupată de șarpe (ca să nu apară fructul peste corp).
+
+2.void gameLoop(GameSession* session)
+bucla principală de joc pentru un client.
+- Așteaptă următorul frame (this_thread::sleep_until).
+- Adună timpul în move_accum (pentru a ști când trebuie să mute șarpele).
+- Aplică input-ul dacă există (session->next_input).
+
+Decide dacă șarpele se misca:
+- în modul input  doar când primește input,
+- în modul predict
+- Mută șarpele înainte (insert noul cap, pop_back coada).
+
+Verifică coliziuni:
+- dacă iese din hartă trimite DISCONNECT reason=lose.
+
+Dacă a prins fructul:
+- crește scorul cu +10,
+- generează fruct nou cu spawnFruit().
+
+Trimite mesaj UPDATE <score> <fruit> <snake> către client.
+
+3.void handleClient(int sock)
+gestionează comunicarea cu un client conectat.
+
+- Citește mesaje de la client cu read().
+- Dacă mesajul este LOGIN <key>:
+- verifică cheia cu SECRET_KEY,
+- trimite LOGIN_OK sau LOGIN_FAIL.
+
+Dacă mesajul este START <mode>:
+- creează o sesiune nouă (GameSession),
+- inițializează șarpele și fructul,
+- pornește un thread cu gameLoop(session).
+
+Dacă mesajul este INPUT <dir>:
+- actualizează direcția viitoare (next_input).
+
+Dacă mesajul este PING:
+- răspunde imediat cu PONG.
+
+4.int main()
+inițializează și pornește serverul.
+
+Creează socket TCP (socket(AF_INET, SOCK_STREAM, 0)).
+Face bind pe portul 65432.
+Pune serverul în listen.
+Acceptă clienți cu accept().
+Pentru fiecare client acceptat, pornește un thread handleClient.
+
+###client.cpp
+In client avem structura GameState care reține starea jocului locală.
+1.void drawGame()
+afișează starea jocului pe ecran folosind ncurses.
+desenează:
+- pereții,
+- fructul (F),
+- șarpele (cap O, corp o),
+- scorul curent.
+2.void listenServer(int sock)
+ascultă permanent mesajele primite de la server.
+
+Rulează într-un thread separat.
+Primește date brute prin read().
+Folosește un buffer carry pentru a construi linii complete (\n).
+
+- Mesaje tratate:
+- UPDATE ...  actualizează scor, fruct și șarpe.
+- DISCONNECT reason=...  afișează motivul și închide jocul.
+- PONG resetează timerul de ping.
+
+long long nowSec()
+returnează timpul curent în secunde.
+Utilizare: la implementarea ping/pong (detectarea deconectării).
+
+3.int main()
+
+- Creează socket și se conectează la server.
+- Trimite cheia de login și verifică dacă serverul răspunde LOGIN_OK.
+
+Cere utilizatorului modul de joc:
+- input (mișcare doar când apeși taste),
+- predict (mișcare automată, cu predicție locală).
+
+Pornește ncurses pentru desen.
+
+Creează un thread pentru listenServer().
+
+Rulează bucla principală:
+trimite PING la fiecare secundă,
+dacă nu primește PONG timp de 5s → afișează Connection lost,
+
+citește input-ul tastaturii (getch()),
+trimite la server INPUT UP/DOWN/LEFT/RIGHT,
+aplică client prediction (șarpele se mișcă instant pe ecran).
+După terminarea jocului, așteaptă 5 secunde și închide terminalul.
+
+Am testat toate functionalitatile implementate si la cele extra am adaugat PING/PONG si client prediction.
+Am deschis 2 terminale si am rulat serverul in unul si clientul in celalalt.
